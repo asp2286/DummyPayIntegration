@@ -6,7 +6,7 @@ namespace DummyPayIntegration.Models
 {
     public class Error
     {
-        public string Type;
-        public string Message;
+        public string Type { get; set; }
+        public string Message { get; set; }
     }
 }

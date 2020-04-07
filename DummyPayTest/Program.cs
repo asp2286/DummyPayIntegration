@@ -1,7 +1,11 @@
 ﻿using System;
+using System.IO;
 using System.Threading.Tasks;
 using DummyPayIntegration;
+using DummyPayIntegration.Domain;
 using DummyPayIntegration.Models;
+using DummyPayIntegration.Service;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -35,12 +39,20 @@ namespace DummyPayTest
         public ILogger Logger { get; set; }
         public Application(IServiceCollection serviceCollection)
         {
-            ConfigureServices(serviceCollection);
+            var builder = new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.json");
+
+            IConfiguration config = new ConfigurationBuilder()
+                .AddJsonFile("appsettings.json", true, true)
+                .Build();
+
+            ConfigureServices(serviceCollection, config["MerchantId"], config["SecretKey"], config["BaseAddress"]);
             Services = serviceCollection.BuildServiceProvider();
             Logger = Services.GetRequiredService<ILoggerFactory>()
                     .CreateLogger<Application>();
             Logger.LogInformation("Application created successfully.");
-            var paymentService = Services.GetRequiredService<IPaymentService>();
+            var paymentService = Services.GetRequiredService<IDummyService>();
             var data = new PaymentCreationRequestData()
             {
                 OrderId = "DBB99946-A10A-4D1B-A742-577FA026BC01",
@@ -54,23 +66,8 @@ namespace DummyPayTest
             };
             try
             {
-                var result = paymentService.CreatePayment(data).GetAwaiter().GetResult();
-                var payment3DS = new Payment3DS()
-                {
-                    MD = "testorder-123",
-                    PaReq = result.PaReq,
-                    TermUrl = "http://locallocal"
-                };
-                var t = paymentService.AutoChallenge(payment3DS, result.Url)
-                    .GetAwaiter()
-                    .GetResult();
-                var dataconfirm = new PaymentConfirmRequestData
-                {
-                    PaRes = t.Value,
-                    TransactionId = result.TransactionId
-                };
-                var resultConfirm = paymentService.ConfirmPayment(dataconfirm).GetAwaiter().GetResult();
-                Logger.LogInformation("Payment finished, status:" + resultConfirm.Status);
+                var result = paymentService.CreatePayment(data, config["MD"], config["TermUrl"]).GetAwaiter().GetResult();
+                Logger.LogInformation("Payment finished, status:" + result.Status);
             }
             catch(PaymentException pex)
             {
@@ -82,16 +79,18 @@ namespace DummyPayTest
             }
         }
 
-        private void ConfigureServices(IServiceCollection serviceCollection)
+        private void ConfigureServices(IServiceCollection serviceCollection, string merchant, string secret, string baseAddr)
         {
             
             serviceCollection.AddSingleton<IPaymentSettings>(new PaymentSettings()
             {
-                MerchantId = "6fc3aa31-7afd-4df1-825f-192e60950ca1",
-                SecretKey = "53cr3t",
-                BaseAddress = new Uri("http://dummypay.host/api/")
+                MerchantId = merchant,
+                SecretKey = secret,
+                BaseAddress = new Uri(baseAddr)
             });
-            serviceCollection.AddSingleton<IPaymentService, PaymentService>();
+            serviceCollection.AddSingleton<IDummyModel, DummyModel>();
+            serviceCollection.AddSingleton<IDummyDomain, DummyDomain>();
+            serviceCollection.AddSingleton<IDummyService, DummyService>();
         }
     }
 }

@@ -10,22 +10,25 @@ using System.Threading.Tasks;
 using System.Linq;
 using System.Web;
 
-namespace DummyPayIntegration
+namespace DummyPayIntegration.Models
 {
-    internal class RequestingPayment
+    public class DummyModel : IDummyModel
     {
         public ILogger Logger { get; }
 
-        public RequestingPayment(ILoggerFactory loggerFactory)
+        public IPaymentSettings paymentSettings { get; }
+
+        public DummyModel(ILoggerFactory loggerFactory, IPaymentSettings paymentSettings)
         {
-            Logger = loggerFactory?.CreateLogger<RequestingPayment>();
+            Logger = loggerFactory?.CreateLogger<DummyModel>();
             if (Logger == null)
             {
                 throw new ArgumentNullException(nameof(loggerFactory));
             }
+            this.paymentSettings = paymentSettings;
         }
 
-        public async Task<PaymentCreationResponseData> PaymentRequest(PaymentCreationRequestData requestData, IPaymentSettings paymentSettings)
+        public async Task<PaymentCreationResponseData> PaymentRequest(PaymentCreationRequestData requestData)
         {
             using (var httpClient = new HttpClient { BaseAddress = paymentSettings.BaseAddress })
             {
@@ -100,7 +103,7 @@ namespace DummyPayIntegration
             }
         }
 
-        public async Task<KeyValuePair<Cookie, string>> GetFormContent(IPaymentSettings paymentSettings, List<KeyValuePair<string, string>> kvp, string url)
+        public async Task<KeyValuePair<Cookie, string>> GetFormContent(List<KeyValuePair<string, string>> kvp, string url)
         {
             var cookieContainer = new CookieContainer();
             var uri = new Uri(url);
@@ -146,6 +149,13 @@ namespace DummyPayIntegration
             }
         }
 
+        /// <summary>
+        /// return KeyValuePair Key=MD, Value=PARes
+        /// </summary>
+        /// <param name="cookie">Site cookie</param>
+        /// <param name="kvp"></param>
+        /// <param name="lastUrl"></param>
+        /// <returns></returns>
         public async Task<KeyValuePair<string,string>> Send3DSConfirm(Cookie cookie, List<KeyValuePair<string, string>> kvp, string lastUrl)
         {
             var cookieContainer = new CookieContainer();
@@ -176,8 +186,8 @@ namespace DummyPayIntegration
                             switch (response.StatusCode)
                             {
                                 case HttpStatusCode.Redirect:
-                                    var location = response.Headers.Location;
-                                    var parameters = HttpUtility.ParseQueryString(location.Query);
+                                    var location = response.Headers.Location.ToString();
+                                    var parameters = HttpUtility.ParseQueryString(location);
                                     return new KeyValuePair<string, string>(parameters["MD"], parameters["PARes"]);
 
                                 default:
@@ -198,7 +208,7 @@ namespace DummyPayIntegration
             }
         }
 
-        public async Task<PaymentConfirmResponseData> PaymentConfirm(PaymentConfirmRequestData requestData, IPaymentSettings paymentSettings)
+        public async Task<PaymentConfirmResponseData> PaymentConfirm(PaymentConfirmRequestData requestData)
         {
             using (var httpClient = new HttpClient { BaseAddress = paymentSettings.BaseAddress })
             {
